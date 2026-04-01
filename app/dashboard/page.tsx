@@ -141,6 +141,34 @@ export default async function DashboardPage() {
           </div>
         </div>
 
+        {/* Linkuri gestionare */}
+        <div className="mb-6 animate-fade-in-up">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Gestionare</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <Link
+              href="/dashboard/banks"
+              className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
+            >
+              <span className="text-2xl block mb-1">🏦</span>
+              <span className="text-sm font-medium text-gray-700">Bănci</span>
+            </Link>
+            <Link
+              href="/dashboard/categories"
+              className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
+            >
+              <span className="text-2xl block mb-1">🏷️</span>
+              <span className="text-sm font-medium text-gray-700">Categorii</span>
+            </Link>
+            <Link
+              href="/dashboard/currencies"
+              className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
+            >
+              <span className="text-2xl block mb-1">💱</span>
+              <span className="text-sm font-medium text-gray-700">Valute</span>
+            </Link>
+          </div>
+        </div>
+
         {/* Empty state / CTA */}
         {!hasTransactions && (
           <div className="glass-card rounded-2xl p-10 text-center animate-fade-in-up">
