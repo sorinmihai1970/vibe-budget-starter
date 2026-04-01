@@ -29,7 +29,7 @@ export default async function DashboardPage() {
     .limit(1)
     .single();
 
-  if (!userData) redirect("/login");
+  if (!userData) redirect("/api/auth/logout");
 
   const user = { ...userData, nativeCurrency: userData.native_currency };
 
