@@ -2,54 +2,164 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* ============================================
+   VIBE BUDGET - DESIGN SYSTEM
+   Primary: Teal (#14B8A6)
+   Secondary: Orange (#F97316)
+   Glassmorphism + Animații
+   ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary: #14B8A6;
+  --primary-dark: #0D9488;
+  --secondary: #F97316;
+  --secondary-dark: #EA580C;
+  --background: #F0FDFA;
+  --foreground: #1F2937;
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.4);
 }
 
-@theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-secondary-dark: var(--secondary-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-
-  /* Override gray text colors */
-  --color-gray-500: #1f2937;
-  --color-gray-600: #1f2937;
-  --color-gray-700: #1f2937;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #111827;
 }
-
-/* Force light mode - disabled dark mode auto-detection */
 
 body {
-  background: #ffffff !important;
-  color: #171717 !important;
-  font-family: Arial, Helvetica, sans-serif;
-  color-scheme: light !important;
+  background: linear-gradient(135deg, #F0FDFA 0%, #E0F2FE 50%, #FFF7ED 100%);
+  min-height: 100vh;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Ensure all headings are dark by default */
 h1, h2, h3, h4, h5, h6 {
   color: #111827;
+  line-height: 1.2;
 }
 
-/* Ensure all paragraphs and text are dark by default */
-p, span, div {
-  color: #171717;
+/* ============================================
+   GLASSMORPHISM
+   ============================================ */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
 }
 
-/* Force rebuild for text color updates */
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
 
-/* Override all gray text colors to ensure readability */
-.text-gray-500,
-.text-gray-600,
-.text-gray-700,
-.text-gray-800,
-[class*="text-gray-5"],
-[class*="text-gray-6"],
-[class*="text-gray-7"],
-[class*="text-gray-8"] {
-  color: #1f2937 !important; /* Dark gray for readability */
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+/* ============================================
+   BUTOANE
+   ============================================ */
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.4);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
+  color: white;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-secondary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.4);
+}
+
+/* ============================================
+   ANIMAȚII
+   ============================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+
+/* ============================================
+   INPUTS
+   ============================================ */
+
+.input-field {
+  width: 100%;
+  border: 1px solid rgba(20, 184, 166, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.2s ease;
+  color: #1F2937;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  background: white;
+}
+
+/* ============================================
+   MISC
+   ============================================ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background-color: var(--primary);
+  color: white;
 }

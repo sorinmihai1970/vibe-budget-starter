@@ -11,6 +11,8 @@
  * - AI insights (health score, recomandări)
  */
 
+import Link from "next/link";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-orange-50  ">
@@ -23,46 +25,25 @@ export default function Home() {
             Aplicație de gestiune financiară personală
           </p>
 
+          <div className="flex items-center justify-center gap-4 mb-10">
+            <Link
+              href="/register"
+              className="px-6 py-3 rounded-full font-semibold text-white"
+              style={{ background: "#14B8A6" }}
+            >
+              Înregistrează-te
+            </Link>
+            <Link
+              href="/login"
+              className="px-6 py-3 rounded-full font-semibold text-white"
+              style={{ background: "#F97316" }}
+            >
+              Login
+            </Link>
+          </div>
+
           <div className="bg-white/80  backdrop-blur-sm rounded-2xl p-8 shadow-lg">
-            <h2 className="text-2xl font-semibold mb-4 text-gray-900 ">
-              🚀 Ce vom construi în Săptămânile 4-5
-            </h2>
-
-            <div className="text-left space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">📊</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900 ">Dashboard interactiv</h3>
-                  <p className="text-gray-600 ">Rezumat financiar cu grafice și statistici</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🏦</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900 ">Multi-bank support</h3>
-                  <p className="text-gray-600 ">Gestionează conturi de la mai multe bănci</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">📁</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900 ">Upload CSV/Excel</h3>
-                  <p className="text-gray-600 ">Import automat extrase bancare (Revolut, ING, BT)</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🤖</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900 ">AI Financial Coach</h3>
-                  <p className="text-gray-600 ">Recomandări personalizate cu Claude AI</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-teal-50  rounded-lg">
+            <div className="p-4 bg-teal-50  rounded-lg">
               <p className="text-sm text-gray-700 ">
                 <strong>📚 Starter Kit Include:</strong> Next.js setup complet, Drizzle ORM schema,
                 Supabase config, Tailwind styling, și structura folderelor pregătită.
