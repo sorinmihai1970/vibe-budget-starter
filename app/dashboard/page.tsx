@@ -141,8 +141,26 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Linkuri gestionare */}
+        {/* Navigare rapidă — întotdeauna vizibilă */}
         <div className="mb-6 animate-fade-in-up">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Tranzacții</h2>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Link
+              href="/dashboard/transactions"
+              className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
+            >
+              <span className="text-2xl block mb-1">📋</span>
+              <span className="text-sm font-medium text-gray-700">Tranzacții</span>
+            </Link>
+            <Link
+              href="/dashboard/upload"
+              className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
+            >
+              <span className="text-2xl block mb-1">📁</span>
+              <span className="text-sm font-medium text-gray-700">Import CSV</span>
+            </Link>
+          </div>
+
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Gestionare</h2>
           <div className="grid grid-cols-3 gap-3">
             <Link
@@ -189,32 +207,6 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        {/* Dacă are tranzacții — link rapid */}
-        {hasTransactions && (
-          <div className="flex gap-3 animate-fade-in-up">
-            <Link
-              href="/dashboard/transactions"
-              className="glass-card flex-1 rounded-2xl p-4 text-center hover:no-underline"
-            >
-              <span className="text-2xl block mb-1">📋</span>
-              <span className="text-sm font-medium text-gray-700">Tranzacții</span>
-            </Link>
-            <Link
-              href="/dashboard/upload"
-              className="glass-card flex-1 rounded-2xl p-4 text-center hover:no-underline"
-            >
-              <span className="text-2xl block mb-1">📁</span>
-              <span className="text-sm font-medium text-gray-700">Import CSV</span>
-            </Link>
-            <Link
-              href="/dashboard/reports"
-              className="glass-card flex-1 rounded-2xl p-4 text-center hover:no-underline"
-            >
-              <span className="text-2xl block mb-1">📊</span>
-              <span className="text-sm font-medium text-gray-700">Rapoarte</span>
-            </Link>
-          </div>
-        )}
       </main>
     </div>
   );
