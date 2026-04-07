@@ -75,6 +75,9 @@ export default function TransactionsClient({ initialTransactions, banks, categor
   const [form, setForm] = useState<FormState>(emptyForm);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Selecție
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Filtre
   const [search, setSearch] = useState("");
   const [filterBank, setFilterBank] = useState("");
@@ -100,6 +103,57 @@ export default function TransactionsClient({ initialTransactions, banks, categor
     setFilterCategory("");
     setFilterDateFrom("");
     setFilterDateTo("");
+  };
+
+  // Selecție
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((t) => t.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const count = selectedIds.size;
+    if (!window.confirm(`Ștergi ${count} tranzacție${count !== 1 ? "ții" : ""}? Acțiunea este ireversibilă.`)) return;
+
+    setIsLoading(true);
+    try {
+      const results = await Promise.all(
+        [...selectedIds].map((id) =>
+          fetch(`/api/transactions/${id}`, { method: "DELETE" })
+        )
+      );
+
+      const failed = results.filter((r) => !r.ok).length;
+      const deleted = count - failed;
+
+      setTransactions((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+      setSelectedIds(new Set());
+
+      if (failed > 0) {
+        toast.error(`${deleted} șterse, ${failed} erori`);
+      } else {
+        toast.success(`${deleted} tranzacție${deleted !== 1 ? "ții" : ""} ștearsă${deleted !== 1 ? "" : ""}`);
+      }
+    } catch {
+      toast.error("Eroare de rețea");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const openAddModal = () => {
@@ -281,20 +335,32 @@ export default function TransactionsClient({ initialTransactions, banks, categor
       {/* Tabel */}
       <div className="glass-card rounded-2xl overflow-hidden">
         {/* Header tabel */}
-        <div className="px-6 py-4 border-b border-white/30 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-white/30 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-gray-800">
             Tranzacții{" "}
             <span className="text-sm font-normal text-gray-500">
               ({filtered.length}{hasFilters ? ` din ${transactions.length}` : ""})
             </span>
           </h2>
-          <button
-            onClick={openAddModal}
-            className="px-4 py-2 rounded-xl text-white text-sm font-medium transition-all"
-            style={{ background: "linear-gradient(135deg, #0D9488, #0EA5E9)" }}
-          >
-            + Adaugă tranzacție
-          </button>
+          <div className="flex items-center gap-2">
+            {someSelected && (
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isLoading}
+                className="px-4 py-2 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #DC2626, #EF4444)" }}
+              >
+                🗑 Șterge selecția ({selectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={openAddModal}
+              className="px-4 py-2 rounded-xl text-white text-sm font-medium transition-all"
+              style={{ background: "linear-gradient(135deg, #0D9488, #0EA5E9)" }}
+            >
+              + Adaugă tranzacție
+            </button>
+          </div>
         </div>
 
         {/* Conținut */}
@@ -313,6 +379,15 @@ export default function TransactionsClient({ initialTransactions, banks, categor
             <table className="w-full">
               <thead>
                 <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-white/20">
+                  <th className="px-4 py-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
+                      title="Selectează toate"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left">Dată</th>
                   <th className="px-4 py-3 text-left">Descriere</th>
                   <th className="px-4 py-3 text-right">Sumă</th>
@@ -326,8 +401,21 @@ export default function TransactionsClient({ initialTransactions, banks, categor
                   <tr
                     key={t.id}
                     className="border-b border-white/10 hover:bg-white/20 transition-colors"
-                    style={index === filtered.length - 1 ? { borderBottom: "none" } : {}}
+                    style={{
+                      ...(index === filtered.length - 1 ? { borderBottom: "none" } : {}),
+                      ...(selectedIds.has(t.id) ? { background: "rgba(13,148,136,0.06)" } : {}),
+                    }}
                   >
+                    {/* Checkbox */}
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(t.id)}
+                        onChange={() => toggleSelect(t.id)}
+                        className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Dată */}
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {formatDate(t.date)}

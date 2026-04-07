@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createId } from "@paralleldrive/cuid2";
+import { autoCategorize } from "@/lib/auto-categorization";
+import { UserKeyword, IncomeCategory, UserCategory } from "@/lib/auto-categorization/types";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,6 +38,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Autentificare
     const supabase = await createClient();
     const {
       data: { user: authUser },
@@ -46,6 +49,95 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // 2. BULK MODE — detectat prin prezența array-ului "transactions" în body
+    if (Array.isArray(body.transactions)) {
+      const { transactions, bank_id } = body as {
+        transactions: {
+          date: string;
+          description: string;
+          amount: number;
+          currency?: string;
+          type?: "debit" | "credit";
+          bankId?: string;
+        }[];
+        bank_id?: string | null;
+      };
+
+      if (transactions.length === 0) {
+        return NextResponse.json(
+          { error: "Nu există tranzacții de importat" },
+          { status: 400 }
+        );
+      }
+
+      const admin = createAdminClient();
+
+      // 3. Pre-fetch keywords utilizator (un singur query pentru toate tranzacțiile)
+      const { data: userKeywords } = await admin
+        .from("user_keywords")
+        .select("id, keyword, category_id")
+        .eq("user_id", authUser.id);
+
+      // 4. Pre-fetch toate categoriile userului (pentru reguli implicite + fallback credit)
+      const { data: allCategories } = await admin
+        .from("categories")
+        .select("id, name, type, is_system_category")
+        .eq("user_id", authUser.id);
+
+      const keywords: UserKeyword[] = userKeywords || [];
+      const allCats: UserCategory[] = allCategories || [];
+      const incomeCats: IncomeCategory[] = allCats.filter(
+        (c) => c.type === "income" && c.is_system_category === true
+      );
+
+      // 5. Construim rândurile pentru insert cu auto-categorizare
+      let categorizedCount = 0;
+
+      const rows = transactions.map((t) => {
+        const categoryId = autoCategorize(
+          t.description,
+          t.type,
+          keywords,
+          incomeCats,
+          allCats
+        );
+
+        if (categoryId !== null) {
+          categorizedCount++;
+        }
+
+        return {
+          id: createId(),
+          user_id: authUser.id,
+          date: t.date,
+          description: t.description.trim(),
+          amount: Number(t.amount),
+          currency: t.currency || "RON",
+          bank_id: bank_id || t.bankId || null,
+          category_id: categoryId,
+        };
+      });
+
+      // 6. Bulk insert
+      const { error } = await admin.from("transactions").insert(rows);
+
+      if (error) {
+        console.error("[TRANSACTIONS] Bulk insert error:", error);
+        throw new Error(error.message);
+      }
+
+      return NextResponse.json(
+        {
+          message: "Import reușit",
+          total: rows.length,
+          categorized: categorizedCount,
+        },
+        { status: 201 }
+      );
+    }
+
+    // SINGLE MODE — comportament original nemodificat
     const { date, description, amount, currency, bank_id, category_id } = body;
 
     if (!date || typeof date !== "string" || date.trim().length === 0) {
