@@ -86,8 +86,8 @@ export async function parseCSV(file: File): Promise<ParseResult> {
             });
           }
         },
-        error: (error) => {
-          resolve({ success: false, transactions: [], error: error.message });
+        error: (err: Error) => {
+          resolve({ success: false, transactions: [], error: err.message });
         },
       });
     });

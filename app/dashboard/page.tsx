@@ -59,15 +59,15 @@ export default async function DashboardPage() {
     .gte("date", firstDayOfMonth)
     .lt("date", firstDayNextMonth);
 
-  const totalBalance = allTransactions.reduce((sum, t) => sum + t.amount, 0);
-  const monthIncome = monthTransactions
-    .filter((t) => t.amount > 0)
-    .reduce((sum, t) => sum + t.amount, 0);
-  const monthExpenses = monthTransactions
-    .filter((t) => t.amount < 0)
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalBalance = (allTransactions ?? []).reduce((sum, t) => sum + (t.amount as number), 0);
+  const monthIncome = (monthTransactions ?? [])
+    .filter((t) => (t.amount as number) > 0)
+    .reduce((sum, t) => sum + (t.amount as number), 0);
+  const monthExpenses = (monthTransactions ?? [])
+    .filter((t) => (t.amount as number) < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount as number), 0);
 
-  const hasTransactions = allTransactions.length > 0;
+  const hasTransactions = (allTransactions ?? []).length > 0;
 
   return (
     <div className="min-h-screen" style={{ background: "linear-gradient(135deg, #F0FDFA 0%, #E0F2FE 50%, #FFF7ED 100%)" }}>

@@ -259,7 +259,7 @@ export default function ReportsClient({ currency }: Props) {
               <ResponsiveContainer width="100%" height={340}>
                 <PieChart>
                   <Pie
-                    data={data.categoryExpenses}
+                    data={data.categoryExpenses as any[]}
                     dataKey="total"
                     nameKey="category_name"
                     cx="50%"
