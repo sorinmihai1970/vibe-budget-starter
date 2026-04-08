@@ -342,7 +342,7 @@ export default function TransactionsClient({ initialTransactions, banks, categor
       {/* Tabel */}
       <div className="glass-card rounded-2xl overflow-hidden">
         {/* Header tabel */}
-        <div className="px-6 py-4 border-b border-white/30 flex items-center justify-between gap-3">
+        <div className="px-4 py-4 border-b border-white/30 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-gray-800">
             Tranzacții{" "}
             <span className="text-sm font-normal text-gray-500">
@@ -354,18 +354,20 @@ export default function TransactionsClient({ initialTransactions, banks, categor
               <button
                 onClick={handleDeleteSelected}
                 disabled={isLoading}
-                className="px-4 py-2 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-50"
+                className="px-3 py-2 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-50"
                 style={{ background: "linear-gradient(135deg, #DC2626, #EF4444)" }}
               >
-                🗑 Șterge selecția ({selectedIds.size})
+                <span className="hidden sm:inline">🗑 Șterge selecția ({selectedIds.size})</span>
+                <span className="sm:hidden">🗑 ({selectedIds.size})</span>
               </button>
             )}
             <button
               onClick={openAddModal}
-              className="px-4 py-2 rounded-xl text-white text-sm font-medium transition-all"
+              className="px-3 py-2 rounded-xl text-white text-sm font-medium transition-all"
               style={{ background: "linear-gradient(135deg, #0D9488, #0EA5E9)" }}
             >
-              + Adaugă tranzacție
+              <span className="hidden sm:inline">+ Adaugă tranzacție</span>
+              <span className="sm:hidden">+ Adaugă</span>
             </button>
           </div>
         </div>
@@ -382,114 +384,171 @@ export default function TransactionsClient({ initialTransactions, banks, categor
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-white/20">
-                  <th className="px-4 py-3 text-center w-10">
-                    <input
-                      type="checkbox"
-                      checked={allFilteredSelected}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
-                      title="Selectează toate"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left">Dată</th>
-                  <th className="px-4 py-3 text-left">Descriere</th>
-                  <th className="px-4 py-3 text-right">Sumă</th>
-                  <th className="px-4 py-3 text-left">Bancă</th>
-                  <th className="px-4 py-3 text-left">Categorie</th>
-                  <th className="px-4 py-3 text-right">Acțiuni</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t, index) => (
-                  <tr
-                    key={t.id}
-                    className="border-b border-white/10 hover:bg-white/20 transition-colors"
-                    style={{
-                      ...(index === filtered.length - 1 ? { borderBottom: "none" } : {}),
-                      ...(selectedIds.has(t.id) ? { background: "rgba(13,148,136,0.06)" } : {}),
-                    }}
-                  >
-                    {/* Checkbox */}
-                    <td className="px-4 py-3 text-center">
+          <>
+            {/* Tabel — desktop (md+) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-xs text-gray-500 uppercase tracking-wide border-b border-white/20">
+                    <th className="px-4 py-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
+                        title="Selectează toate"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left">Dată</th>
+                    <th className="px-4 py-3 text-left">Descriere</th>
+                    <th className="px-4 py-3 text-right">Sumă</th>
+                    <th className="px-4 py-3 text-left">Bancă</th>
+                    <th className="px-4 py-3 text-left">Categorie</th>
+                    <th className="px-4 py-3 text-right">Acțiuni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((t, index) => (
+                    <tr
+                      key={t.id}
+                      className="border-b border-white/10 hover:bg-white/20 transition-colors"
+                      style={{
+                        ...(index === filtered.length - 1 ? { borderBottom: "none" } : {}),
+                        ...(selectedIds.has(t.id) ? { background: "rgba(13,148,136,0.06)" } : {}),
+                      }}
+                    >
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(t.id)}
+                          onChange={() => toggleSelect(t.id)}
+                          className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {formatDate(t.date)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 max-w-xs">
+                        <span className="block truncate" title={t.description}>
+                          {t.description}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap">
+                        <span style={{ color: t.amount >= 0 ? "#059669" : "#DC2626" }}>
+                          {formatAmount(t.amount, t.currency)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {t.banks ? (
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ background: t.banks.color }}
+                            />
+                            <span className="text-gray-700 truncate max-w-24">{t.banks.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {t.categories ? (
+                          <span className="text-gray-700">
+                            {t.categories.icon} {t.categories.name}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => openEditModal(t)}
+                          disabled={isLoading}
+                          className="text-sm text-teal-600 hover:text-teal-800 font-medium px-2 py-1 rounded-lg hover:bg-teal-50 transition-all mr-1 disabled:opacity-50"
+                        >
+                          Editează
+                        </button>
+                        <button
+                          onClick={() => handleDelete(t)}
+                          disabled={isLoading}
+                          className="text-sm text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50"
+                        >
+                          Șterge
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Carduri — mobile (sub md) */}
+            <div className="md:hidden divide-y divide-white/20">
+              {filtered.map((t) => (
+                <div
+                  key={t.id}
+                  className="px-4 py-3 transition-colors"
+                  style={selectedIds.has(t.id) ? { background: "rgba(13,148,136,0.06)" } : {}}
+                >
+                  {/* Rând 1: checkbox + dată + sumă */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(t.id)}
                         onChange={() => toggleSelect(t.id)}
-                        className="w-4 h-4 rounded accent-teal-500 cursor-pointer"
+                        className="w-4 h-4 rounded accent-teal-500 cursor-pointer flex-shrink-0"
                       />
-                    </td>
-
-                    {/* Dată */}
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {formatDate(t.date)}
-                    </td>
-
-                    {/* Descriere */}
-                    <td className="px-4 py-3 text-sm text-gray-800 max-w-xs">
-                      <span className="block truncate" title={t.description}>
-                        {t.description}
-                      </span>
-                    </td>
-
-                    {/* Sumă */}
-                    <td className="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap">
-                      <span style={{ color: t.amount >= 0 ? "#059669" : "#DC2626" }}>
-                        {formatAmount(t.amount, t.currency)}
-                      </span>
-                    </td>
-
-                    {/* Bancă */}
-                    <td className="px-4 py-3 text-sm">
-                      {t.banks ? (
-                        <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{formatDate(t.date)}</span>
+                      {t.banks && (
+                        <span className="flex items-center gap-1">
                           <span
-                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            className="w-2 h-2 rounded-full flex-shrink-0"
                             style={{ background: t.banks.color }}
                           />
-                          <span className="text-gray-700 truncate max-w-24">{t.banks.name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-
-                    {/* Categorie */}
-                    <td className="px-4 py-3 text-sm">
-                      {t.categories ? (
-                        <span className="text-gray-700">
-                          {t.categories.icon} {t.categories.name}
+                          <span className="text-xs text-gray-400 truncate max-w-20">{t.banks.name}</span>
                         </span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
                       )}
-                    </td>
+                    </div>
+                    <span
+                      className="text-sm font-bold whitespace-nowrap ml-2"
+                      style={{ color: t.amount >= 0 ? "#059669" : "#DC2626" }}
+                    >
+                      {formatAmount(t.amount, t.currency)}
+                    </span>
+                  </div>
 
-                    {/* Acțiuni */}
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                  {/* Rând 2: descriere */}
+                  <p className="text-sm text-gray-800 leading-tight mb-1.5 pl-6 truncate" title={t.description}>
+                    {t.description}
+                  </p>
+
+                  {/* Rând 3: categorie + butoane */}
+                  <div className="flex items-center justify-between pl-6">
+                    <span className="text-xs text-gray-400">
+                      {t.categories ? `${t.categories.icon} ${t.categories.name}` : ""}
+                    </span>
+                    <div className="flex gap-1">
                       <button
                         onClick={() => openEditModal(t)}
                         disabled={isLoading}
-                        className="text-sm text-teal-600 hover:text-teal-800 font-medium px-2 py-1 rounded-lg hover:bg-teal-50 transition-all mr-1 disabled:opacity-50"
+                        className="text-xs text-teal-600 hover:text-teal-800 font-medium px-2 py-1 rounded-lg hover:bg-teal-50 transition-all disabled:opacity-50"
                       >
                         Editează
                       </button>
                       <button
                         onClick={() => handleDelete(t)}
                         disabled={isLoading}
-                        className="text-sm text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50"
+                        className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50"
                       >
                         Șterge
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
