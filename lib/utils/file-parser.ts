@@ -60,6 +60,40 @@ export interface ParseResult {
  * Переводы,Сбережения,2025-12-02 08:57:52,2025-12-02 08:57:52,В кошелек,0.10,0.00,EUR
  */
 export async function parseCSV(file: File): Promise<ParseResult> {
+  // Citim textul brut pentru a detecta formatul înainte de parsare
+  const rawText = await file.text();
+  const firstLines = rawText.split(/\r?\n/).slice(0, 6).join(" ").toLowerCase();
+
+  // Detecție format ING (primele rânduri conțin "titular cont" sau "cnp:")
+  const isING = firstLines.includes("titular cont") || firstLines.includes("cnp:");
+
+  if (isING) {
+    console.log('[parseCSV] Format ING detectat → parser specializat');
+    return new Promise((resolve) => {
+      Papa.parse(rawText, {
+        header: false,
+        skipEmptyLines: false, // păstrăm rândurile goale (separator între tranzacții)
+        complete: (results) => {
+          const rows = results.data as string[][];
+          const transactions = parseINGRows(rows);
+          if (transactions.length > 0) {
+            resolve({ success: true, transactions, rowCount: rows.length });
+          } else {
+            resolve({
+              success: false,
+              transactions: [],
+              error: "Nu s-au putut extrage tranzacții din fișierul ING",
+            });
+          }
+        },
+        error: (error) => {
+          resolve({ success: false, transactions: [], error: error.message });
+        },
+      });
+    });
+  }
+
+  // Parser generic standard (CSV cu header pe primul rând)
   return new Promise((resolve) => {
     Papa.parse(file, {
       header: true, // Prima linie = header-e (nume coloane)
@@ -128,9 +162,124 @@ export async function parseCSV(file: File): Promise<ParseResult> {
 }
 
 /**
+ * Parser specializat pentru ING România Excel
+ *
+ * Formatul ING are:
+ * - 3 rânduri de metadata (Titular cont, CNP, Adresă)
+ * - Un rând de header cu: "Data", "Detalii tranzactie", "Debit", "Credit"
+ * - Fiecare tranzacție ocupă MAI MULTE rânduri (data + suma sunt pe primul rând,
+ *   detaliile suplimentare continuă pe rândurile următoare)
+ * - Data în format text românesc: "02 martie 2026"
+ */
+function parseINGRows(rows: any[][]): ParsedTransaction[] {
+  const ROMANIAN_MONTHS: Record<string, string> = {
+    "ianuarie": "01", "februarie": "02", "martie": "03", "aprilie": "04",
+    "mai": "05", "iunie": "06", "iulie": "07", "august": "08",
+    "septembrie": "09", "octombrie": "10", "noiembrie": "11", "decembrie": "12",
+  };
+
+  const parseRomanianDate = (str: string): string | null => {
+    const parts = str.trim().split(/\s+/);
+    if (parts.length === 3) {
+      const month = ROMANIAN_MONTHS[parts[1]?.toLowerCase()];
+      if (month) return `${parts[2]}-${month}-${parts[0].padStart(2, "0")}`;
+    }
+    return null;
+  };
+
+  // Găsim rândul cu headerele (conține "Data", "Debit", "Credit")
+  let headerIdx = -1;
+  let dataCol = -1, detailsCol = -1, debitCol = -1, creditCol = -1;
+
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i];
+    for (let j = 0; j < row.length; j++) {
+      const cell = String(row[j]).toLowerCase().trim();
+      if (cell === "data") { headerIdx = i; dataCol = j; }
+      if (cell.includes("detalii")) detailsCol = j;
+      if (cell === "debit") debitCol = j;
+      if (cell === "credit") creditCol = j;
+    }
+    if (dataCol !== -1 && debitCol !== -1) break;
+  }
+
+  if (headerIdx === -1 || dataCol === -1) {
+    console.warn("[parseING] Nu s-a găsit rândul header");
+    return [];
+  }
+
+  console.log(`[parseING] Header la rândul ${headerIdx}: dataCol=${dataCol}, detailsCol=${detailsCol}, debitCol=${debitCol}, creditCol=${creditCol}`);
+
+  const toNum = (val: any): number => {
+    if (typeof val === "number") return val;
+    if (!val) return 0;
+    return parseFloat(String(val).replace(",", ".").replace(/\s/g, "")) || 0;
+  };
+
+  const transactions: ParsedTransaction[] = [];
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+
+    // Căutăm data în orice celulă (celulele unite pot decala coloanele cu 1)
+    let parsedDate: string | null = null;
+    for (let j = 0; j < row.length; j++) {
+      const d = parseRomanianDate(String(row[j] || "").trim());
+      if (d) { parsedDate = d; break; }
+    }
+    if (!parsedDate) continue; // rând de continuare, ignorăm
+
+    // Descriere: la detailsCol sau detailsCol-1 (compensăm offset)
+    let description = "";
+    if (detailsCol >= 0) {
+      description = String(row[detailsCol] || "").trim() ||
+                    String(row[detailsCol - 1] || "").trim();
+    }
+    // Fallback: prima celulă non-goală care nu e data
+    if (!description) {
+      description = row.map(String).find((v) => {
+        const s = v.trim();
+        return s && !parseRomanianDate(s);
+      }) || "";
+    }
+
+    // Sumă: la debitCol/creditCol sau coloanele adiacente
+    const debit = debitCol >= 0
+      ? toNum(row[debitCol]) || toNum(row[debitCol - 1])
+      : 0;
+    const credit = creditCol >= 0
+      ? toNum(row[creditCol]) || toNum(row[creditCol - 1])
+      : 0;
+
+    // Dacă tot nu găsim suma, căutăm prima valoare numerică > 0 din rând
+    let amount = credit > 0 ? credit : -debit;
+    if (amount === 0) {
+      for (let j = 0; j < row.length; j++) {
+        const v = toNum(row[j]);
+        if (v > 0) { amount = -v; break; } // presupunem cheltuială
+      }
+    }
+
+    if (!description && amount === 0) continue;
+
+    transactions.push({
+      date: parsedDate,
+      description: description.trim() || "Tranzacție ING",
+      amount,
+      currency: "RON",
+      type: amount >= 0 ? "credit" : "debit",
+    });
+  }
+
+  console.log(`[parseING] ${transactions.length} tranzacții extrase`);
+  return transactions;
+}
+
+/**
  * FUNCȚIA 2: Parse Excel
  *
  * Parsează un fișier Excel (.xlsx) și extrage tranzacțiile.
+ * Suportă formatul ING România (multi-rând, dată în română) și formatul generic.
  */
 export async function parseExcel(file: File): Promise<ParseResult> {
   return new Promise((resolve) => {
@@ -155,13 +304,36 @@ export async function parseExcel(file: File): Promise<ParseResult> {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
-        // Convertim în JSON
+        // Citim rândurile brute pentru detecție format
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+        console.log('[parseExcel] Sheet:', sheetName, '| Total rânduri brute:', rawRows.length);
+        console.log('[parseExcel] Primele 3 rânduri:', rawRows.slice(0, 3));
+
+        // Detecție format ING (primele rânduri conțin "titular cont" sau "cnp:")
+        const isING = rawRows.slice(0, 6).some((row) =>
+          row.some((cell) => {
+            const s = String(cell).toLowerCase();
+            return s.includes("titular cont") || s.startsWith("cnp:");
+          })
+        );
+
+        if (isING) {
+          console.log('[parseExcel] Format ING detectat → parser specializat');
+          const transactions = parseINGRows(rawRows);
+          if (transactions.length > 0) {
+            resolve({ success: true, transactions, rowCount: rawRows.length });
+            return;
+          }
+          // Dacă ING parser nu a găsit nimic, continuăm cu parser-ul generic
+          console.warn('[parseExcel] ING parser n-a găsit tranzacții, încearcă parser generic');
+        }
+
+        // Parser generic (format tabelar standard)
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        console.log('[parseExcel] Sheet name:', sheetName);
-        console.log('[parseExcel] Total rows:', jsonData.length);
-        console.log('[parseExcel] First row sample:', jsonData[0]);
-        console.log('[parseExcel] Column headers:', Object.keys(jsonData[0] || {}));
+        console.log('[parseExcel] Total rânduri JSON:', jsonData.length);
+        console.log('[parseExcel] Primul rând:', jsonData[0]);
 
         if (jsonData.length === 0) {
           resolve({
@@ -183,13 +355,7 @@ export async function parseExcel(file: File): Promise<ParseResult> {
             const currency = detectCurrency(row);
 
             if (index < 3) {
-              console.log(`[parseExcel] Row ${index}:`, {
-                date,
-                description,
-                amount,
-                currency,
-                rawRow: row
-              });
+              console.log(`[parseExcel] Row ${index}:`, { date, description, amount, currency, rawRow: row });
             }
 
             if (date && description && amount !== null) {
@@ -203,16 +369,13 @@ export async function parseExcel(file: File): Promise<ParseResult> {
               });
             } else {
               if (index < 5) {
-                console.warn(`[parseExcel] Skipping row ${index} - missing data:`, {
-                  hasDate: !!date,
-                  hasDescription: !!description,
-                  hasAmount: amount !== null,
-                  row
+                console.warn(`[parseExcel] Skipping row ${index}:`, {
+                  hasDate: !!date, hasDescription: !!description, hasAmount: amount !== null, row
                 });
               }
             }
           } catch (err) {
-            console.warn(`[parseExcel] Eroare la parsarea rândului ${index}:`, err);
+            console.warn(`[parseExcel] Eroare rând ${index}:`, err);
           }
         });
 
@@ -486,12 +649,18 @@ function formatDate(dateStr: string | number): string {
     }
   }
 
-  // Parsăm formate românești: DD.MM.YYYY sau DD/MM/YYYY
+  // Parsăm formate românești: DD.MM.YYYY sau DD/MM/YYYY (cu sau fără timestamp)
   const parts = cleanStr.split(/[./-]/);
   console.log('[formatDate] Parsed parts:', parts);
 
-  if (parts.length === 3) {
-    const [day, month, year] = parts;
+  if (parts.length >= 3) {
+    let [day, month, yearRaw] = parts;
+    // Eliminăm partea de timp dacă există (ex: "2026 10:41" → "2026")
+    const year = yearRaw.split(/[\sT]/)[0];
+    // Dacă "month" > 12 e imposibil → formatul e MM/DD/YYYY → swap ziua cu luna
+    if (parseInt(month, 10) > 12) {
+      [day, month] = [month, day];
+    }
     const fullYear = year.length === 2 ? `20${year}` : year;
     const result = `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     console.log('[formatDate] Romanian format detected. Result:', result);

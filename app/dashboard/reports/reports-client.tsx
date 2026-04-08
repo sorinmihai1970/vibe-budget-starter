@@ -77,7 +77,7 @@ function HealthScoreRing({ score }: { score: number }) {
   const offset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="relative shrink-0" style={{ width: 100, height: 100 }}>
       <svg width="100" height="100" className="-rotate-90">
         <circle cx="50" cy="50" r={radius} fill="none" stroke="#E5E7EB" strokeWidth="10" />
         <circle
@@ -89,8 +89,10 @@ function HealthScoreRing({ score }: { score: number }) {
           style={{ transition: "stroke-dashoffset 1s ease" }}
         />
       </svg>
-      <p className="text-3xl font-bold -mt-16" style={{ color }}>{score}</p>
-      <p className="text-xs text-gray-400 mt-8">/ 100</p>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <p className="text-2xl font-bold leading-none" style={{ color }}>{score}</p>
+        <p className="text-xs text-gray-400 leading-none mt-1">/ 100</p>
+      </div>
     </div>
   );
 }

@@ -85,6 +85,13 @@ export default function TransactionsClient({ initialTransactions, banks, categor
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
 
+  // Bănci unice din tranzacțiile existente (pentru filtru)
+  const banksForFilter = [...new Map(
+    transactions
+      .filter((t) => t.bank_id && t.banks)
+      .map((t) => [t.bank_id, { id: t.bank_id!, name: t.banks!.name, color: t.banks!.color }])
+  ).values()].sort((a, b) => a.name.localeCompare(b.name));
+
   // Filtrare client-side
   const filtered = transactions.filter((t) => {
     if (search && !t.description.toLowerCase().includes(search.toLowerCase())) return false;
@@ -279,7 +286,7 @@ export default function TransactionsClient({ initialTransactions, banks, categor
             className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white/70 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
           >
             <option value="">Toate băncile</option>
-            {banks.map((b) => (
+            {banksForFilter.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>

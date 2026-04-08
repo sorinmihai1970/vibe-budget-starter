@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
           .from("transactions")
           .select("amount, category_id, categories(name, color, icon)")
           .eq("user_id", authUser.id)
-          .lt("amount", "0");
+          .lt("amount", 0);
         if (startDate) q = q.gte("date", startDate);
         if (endDate) q = q.lt("date", endDate);
         return q;

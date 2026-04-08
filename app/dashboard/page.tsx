@@ -162,7 +162,7 @@ export default async function DashboardPage() {
           </div>
 
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Analize</h2>
-          <div className="grid grid-cols-1 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <Link
               href="/dashboard/reports"
               className="glass-card rounded-2xl p-5 flex items-center gap-4 hover:no-underline hover:scale-[1.01] transition-transform duration-200"
@@ -171,6 +171,16 @@ export default async function DashboardPage() {
               <div>
                 <p className="font-semibold text-gray-800">Rapoarte</p>
                 <p className="text-sm text-gray-500">Grafice cheltuieli și venituri</p>
+              </div>
+            </Link>
+            <Link
+              href="/dashboard/keywords"
+              className="glass-card rounded-2xl p-5 flex items-center gap-4 hover:no-underline hover:scale-[1.01] transition-transform duration-200"
+            >
+              <span className="text-3xl">🔑</span>
+              <div>
+                <p className="font-semibold text-gray-800">Reguli categorii</p>
+                <p className="text-sm text-gray-500">Auto-categorizare la import</p>
               </div>
             </Link>
           </div>
