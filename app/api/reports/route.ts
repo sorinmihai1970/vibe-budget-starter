@@ -104,27 +104,22 @@ export async function GET(request: NextRequest) {
     const currency = (userResult.data as { native_currency: string } | null)?.native_currency || "RON";
 
     // 4. Procesare Pie Chart — grupare cheltuieli pe categorii
-    type ExpenseRow = {
-      amount: string | number;
-      category_id: string | null;
-      categories: { name: string; color: string; icon: string } | null;
-    };
-
     const expenseMap = new Map<
       string,
       { name: string; color: string; icon: string; total: number }
     >();
 
-    for (const row of (expensesResult.data as ExpenseRow[])) {
-      const key = row.category_id ?? "__null__";
+    for (const row of (expensesResult.data as any[])) {
+      const key = (row.category_id as string | null) ?? "__null__";
       const amt = Math.abs(Number(row.amount));
+      const cat = Array.isArray(row.categories) ? row.categories[0] : row.categories;
       if (expenseMap.has(key)) {
         expenseMap.get(key)!.total += amt;
       } else {
         expenseMap.set(key, {
-          name: row.categories?.name ?? "Necategorizat",
-          color: row.categories?.color ?? "#94A3B8",
-          icon: row.categories?.icon ?? "📁",
+          name: cat?.name ?? "Necategorizat",
+          color: cat?.color ?? "#94A3B8",
+          icon: cat?.icon ?? "📁",
           total: amt,
         });
       }
