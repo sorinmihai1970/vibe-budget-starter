@@ -187,88 +187,142 @@ function parseINGRows(rows: any[][]): ParsedTransaction[] {
     return null;
   };
 
-  // Găsim rândul cu headerele (conține "Data", "Debit", "Credit")
-  let headerIdx = -1;
-  let dataCol = -1, detailsCol = -1, debitCol = -1, creditCol = -1;
+  // FIX: Elimină separatorul de mii (.) înainte de a converti
+  // Ex: "1.000,00" → elimină "." → "1000,00" → înlocuiește "," → "1000.00" → 1000
+  const toNum = (val: any): number => {
+    if (typeof val === "number") return val;
+    if (!val) return 0;
+    const cleaned = String(val)
+      .replace(/\s/g, "")        // elimină spații
+      .replace(/\./g, "")        // elimină separatorul de mii (.)
+      .replace(",", ".");         // înlocuiește separatorul zecimal (, → .)
+    return parseFloat(cleaned) || 0;
+  };
 
-  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+  // Găsim TOATE rândurile header din fișier (fișierul ING are mai multe pagini)
+  // Fiecare pagină are propriul header cu "Data", "Detalii tranzactie", "Debit", "Credit"
+  interface SectionHeader {
+    idx: number;
+    detailsCol: number;
+    debitCol: number;
+    creditCol: number;
+  }
+  const sections: SectionHeader[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    let dataCol = -1, detailsCol = -1, debitCol = -1, creditCol = -1;
     for (let j = 0; j < row.length; j++) {
       const cell = String(row[j]).toLowerCase().trim();
-      if (cell === "data") { headerIdx = i; dataCol = j; }
+      if (cell === "data") dataCol = j;
       if (cell.includes("detalii")) detailsCol = j;
       if (cell === "debit") debitCol = j;
       if (cell === "credit") creditCol = j;
     }
-    if (dataCol !== -1 && debitCol !== -1) break;
+    if (dataCol !== -1 && debitCol !== -1) {
+      sections.push({ idx: i, detailsCol, debitCol, creditCol });
+    }
   }
 
-  if (headerIdx === -1 || dataCol === -1) {
-    console.warn("[parseING] Nu s-a găsit rândul header");
+  if (sections.length === 0) {
+    console.warn("[parseING] Nu s-a găsit niciun rând header");
     return [];
   }
 
-  console.log(`[parseING] Header la rândul ${headerIdx}: dataCol=${dataCol}, detailsCol=${detailsCol}, debitCol=${debitCol}, creditCol=${creditCol}`);
-
-  const toNum = (val: any): number => {
-    if (typeof val === "number") return val;
-    if (!val) return 0;
-    return parseFloat(String(val).replace(",", ".").replace(/\s/g, "")) || 0;
-  };
+  console.log(`[parseING] ${sections.length} secțiuni găsite la rândurile:`, sections.map(s => s.idx));
 
   const transactions: ParsedTransaction[] = [];
 
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const row = rows[i];
+  for (let s = 0; s < sections.length; s++) {
+    const { idx: headerIdx, detailsCol, debitCol, creditCol } = sections[s];
+    const sectionEnd = s + 1 < sections.length ? sections[s + 1].idx : rows.length;
 
-    // Căutăm data în orice celulă (celulele unite pot decala coloanele cu 1)
-    let parsedDate: string | null = null;
-    for (let j = 0; j < row.length; j++) {
-      const d = parseRomanianDate(String(row[j] || "").trim());
-      if (d) { parsedDate = d; break; }
-    }
-    if (!parsedDate) continue; // rând de continuare, ignorăm
+    let i = headerIdx + 1;
+    while (i < sectionEnd) {
+      const row = rows[i];
 
-    // Descriere: la detailsCol sau detailsCol-1 (compensăm offset)
-    let description = "";
-    if (detailsCol >= 0) {
-      description = String(row[detailsCol] || "").trim() ||
-                    String(row[detailsCol - 1] || "").trim();
-    }
-    // Fallback: prima celulă non-goală care nu e data
-    if (!description) {
-      description = row.map(String).find((v) => {
-        const s = v.trim();
-        return s && !parseRomanianDate(s);
-      }) || "";
-    }
-
-    // Sumă: la debitCol/creditCol sau coloanele adiacente
-    const debit = debitCol >= 0
-      ? toNum(row[debitCol]) || toNum(row[debitCol - 1])
-      : 0;
-    const credit = creditCol >= 0
-      ? toNum(row[creditCol]) || toNum(row[creditCol - 1])
-      : 0;
-
-    // Dacă tot nu găsim suma, căutăm prima valoare numerică > 0 din rând
-    let amount = credit > 0 ? credit : -debit;
-    if (amount === 0) {
+      // Căutăm data în orice celulă (celulele unite pot decala coloanele cu 1)
+      let parsedDate: string | null = null;
       for (let j = 0; j < row.length; j++) {
-        const v = toNum(row[j]);
-        if (v > 0) { amount = -v; break; } // presupunem cheltuială
+        const d = parseRomanianDate(String(row[j] || "").trim());
+        if (d) { parsedDate = d; break; }
       }
+
+      if (!parsedDate) { i++; continue; }
+
+      // Descriere principală (tipul tranzacției): "Cumparare POS", "Incasare", "Transfer" etc.
+      let mainDesc = "";
+      if (detailsCol >= 0) {
+        mainDesc = String(row[detailsCol] || "").trim() ||
+                   String(row[detailsCol - 1] || "").trim();
+      }
+      if (!mainDesc) {
+        mainDesc = row.map(String).find((v) => {
+          const s = v.trim();
+          return s && !parseRomanianDate(s);
+        }) || "";
+      }
+
+      // Sumă: la debitCol/creditCol sau coloanele adiacente (offset -1 pentru celule unite)
+      const debit = debitCol >= 0
+        ? toNum(row[debitCol]) || toNum(row[debitCol - 1])
+        : 0;
+      const credit = creditCol >= 0
+        ? toNum(row[creditCol]) || toNum(row[creditCol - 1])
+        : 0;
+      let amount = credit > 0 ? credit : -debit;
+
+      // Colectăm rândurile de continuare (detalii suplimentare ale tranzacției)
+      // până la următorul rând cu dată sau sfârșitul secțiunii
+      const continuationLines: string[] = [];
+      let j = i + 1;
+      while (j < sectionEnd) {
+        const nextRow = rows[j];
+        const hasDate = nextRow.some(c => parseRomanianDate(String(c || "").trim()) !== null);
+        if (hasDate) break;
+        // Colectăm prima celulă non-goală din rând
+        const detail = nextRow.map(String).find(v => v.trim() !== "");
+        if (detail) continuationLines.push(detail.trim());
+        j++;
+      }
+
+      // Construim descrierea finală din rândurile de continuare
+      let description = mainDesc;
+      const descLower = mainDesc.toLowerCase();
+
+      if (descLower === "cumparare pos" || descLower === "cumparare online") {
+        // Extragem numele comerciantului din "Terminal:LIDL RO 0455 RO Targoviste"
+        const terminalLine = continuationLines.find(d => d.startsWith("Terminal:"));
+        if (terminalLine) {
+          const raw = terminalLine.replace("Terminal:", "").trim();
+          // Curățăm: eliminăm sufixul " RO CityName" de la final
+          const cleaned = raw.replace(/\s+RO\s+\S+\s*$/, "").trim();
+          description = cleaned || mainDesc;
+        }
+      } else if (descLower.includes("incasare")) {
+        // Adăugăm ordonatorul și scopul plății
+        const ordonator = continuationLines.find(d => d.startsWith("Ordonator:"));
+        const detalii = continuationLines.find(d => d.startsWith("Detalii:"));
+        if (ordonator) description += " - " + ordonator.replace("Ordonator:", "").trim();
+        if (detalii) description += " (" + detalii.replace("Detalii:", "").trim() + ")";
+      } else if (descLower.includes("transfer")) {
+        // Adăugăm scopul transferului
+        const detalii = continuationLines.find(d => d.startsWith("Detalii:"));
+        if (detalii) description += " - " + detalii.replace("Detalii:", "").trim();
+      }
+
+      if (!description && amount === 0) { i = j; continue; }
+
+      transactions.push({
+        date: parsedDate,
+        description: description.trim() || "Tranzacție ING",
+        amount,
+        currency: "RON",
+        type: amount >= 0 ? "credit" : "debit",
+      });
+
+      i = j; // Sărim direct la următoarea tranzacție
     }
-
-    if (!description && amount === 0) continue;
-
-    transactions.push({
-      date: parsedDate,
-      description: description.trim() || "Tranzacție ING",
-      amount,
-      currency: "RON",
-      type: amount >= 0 ? "credit" : "debit",
-    });
   }
 
   console.log(`[parseING] ${transactions.length} tranzacții extrase`);

@@ -35,6 +35,9 @@ export default function KeywordsClient({ initialKeywords, categories }: Props) {
   const [formCategoryId, setFormCategoryId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "expense" | "income">("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editKeyword, setEditKeyword] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
 
   const expenseCategories = categories.filter((c) => c.type === "expense");
   const incomeCategories = categories.filter((c) => c.type === "income");
@@ -75,6 +78,42 @@ export default function KeywordsClient({ initialKeywords, categories }: Props) {
       setFormKeyword("");
       setFormCategoryId("");
       toast.success("Keyword adăugat");
+    } catch {
+      toast.error("Eroare de conexiune");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditStart = (kw: Keyword) => {
+    setEditingId(kw.id);
+    setEditKeyword(kw.keyword);
+    setEditCategoryId(kw.category_id);
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditKeyword("");
+    setEditCategoryId("");
+  };
+
+  const handleEditSave = async (kw: Keyword) => {
+    if (!editKeyword.trim()) { toast.error("Introdu un keyword"); return; }
+    if (!editCategoryId) { toast.error("Selectează o categorie"); return; }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/keywords/${kw.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: editKeyword.trim(), category_id: editCategoryId }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error || "Eroare la salvare"); return; }
+
+      setKeywords((prev) => prev.map((k) => k.id === kw.id ? json.data as Keyword : k));
+      setEditingId(null);
+      toast.success("Keyword actualizat");
     } catch {
       toast.error("Eroare de conexiune");
     } finally {
@@ -209,51 +248,118 @@ export default function KeywordsClient({ initialKeywords, categories }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filteredKeywords.map((kw) => (
-                <tr
-                  key={kw.id}
-                  className="border-b border-white/20 last:border-0 hover:bg-white/20 transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded-lg text-gray-700">
-                      {kw.keyword}
-                    </code>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: kw.categories?.color ?? "#94A3B8" }}
+              {filteredKeywords.map((kw) =>
+                editingId === kw.id ? (
+                  // Rând în modul editare
+                  <tr key={kw.id} className="border-b border-white/20 last:border-0 bg-teal-50/30">
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={editKeyword}
+                        onChange={(e) => setEditKeyword(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleEditSave(kw); if (e.key === "Escape") handleEditCancel(); }}
+                        className="input-field w-full text-sm font-mono"
+                        autoFocus
                       />
-                      <span className="text-sm text-gray-700">
-                        {kw.categories?.icon} {kw.categories?.name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3" colSpan={2}>
+                      <select
+                        value={editCategoryId}
+                        onChange={(e) => setEditCategoryId(e.target.value)}
+                        className="input-field w-full text-sm"
+                      >
+                        <option value="">Selectează categoria...</option>
+                        {expenseCategories.length > 0 && (
+                          <optgroup label="Cheltuieli">
+                            {expenseCategories.map((c) => (
+                              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {incomeCategories.length > 0 && (
+                          <optgroup label="Venituri">
+                            {incomeCategories.map((c) => (
+                              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => handleEditSave(kw)}
+                          disabled={isLoading}
+                          className="text-sm font-medium px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-700 transition-all duration-200 disabled:opacity-50"
+                        >
+                          Salvează
+                        </button>
+                        <button
+                          onClick={handleEditCancel}
+                          disabled={isLoading}
+                          className="text-sm font-medium px-3 py-1.5 rounded-lg border border-gray-200 bg-white/70 hover:bg-white text-gray-600 transition-all duration-200 disabled:opacity-50"
+                        >
+                          Anulează
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  // Rând normal
+                  <tr
+                    key={kw.id}
+                    className="border-b border-white/20 last:border-0 hover:bg-white/20 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded-lg text-gray-700">
+                        {kw.keyword}
+                      </code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: kw.categories?.color ?? "#94A3B8" }}
+                        />
+                        <span className="text-sm text-gray-700">
+                          {kw.categories?.icon} {kw.categories?.name ?? "—"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell">
+                      <span
+                        className="text-xs font-medium px-2 py-1 rounded-full"
+                        style={{
+                          background: kw.categories?.type === "income"
+                            ? "rgba(5,150,105,0.1)"
+                            : "rgba(249,115,22,0.1)",
+                          color: kw.categories?.type === "income" ? "#059669" : "#F97316",
+                        }}
+                      >
+                        {kw.categories?.type === "income" ? "Venit" : "Cheltuială"}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 hidden sm:table-cell">
-                    <span
-                      className="text-xs font-medium px-2 py-1 rounded-full"
-                      style={{
-                        background: kw.categories?.type === "income"
-                          ? "rgba(5,150,105,0.1)"
-                          : "rgba(249,115,22,0.1)",
-                        color: kw.categories?.type === "income" ? "#059669" : "#F97316",
-                      }}
-                    >
-                      {kw.categories?.type === "income" ? "Venit" : "Cheltuială"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleDelete(kw)}
-                      disabled={isLoading}
-                      className="text-sm font-medium px-3 py-1.5 rounded-lg border border-red-200 bg-red-50/70 hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-200 disabled:opacity-50"
-                    >
-                      Șterge
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => handleEditStart(kw)}
+                          disabled={isLoading}
+                          className="text-sm font-medium px-3 py-1.5 rounded-lg border border-teal-200 bg-teal-50/70 hover:bg-teal-50 text-teal-700 transition-all duration-200 disabled:opacity-50"
+                        >
+                          Editează
+                        </button>
+                        <button
+                          onClick={() => handleDelete(kw)}
+                          disabled={isLoading}
+                          className="text-sm font-medium px-3 py-1.5 rounded-lg border border-red-200 bg-red-50/70 hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-200 disabled:opacity-50"
+                        >
+                          Șterge
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
