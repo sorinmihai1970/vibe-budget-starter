@@ -15,7 +15,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-type PeriodFilter = "current_month" | "last_3_months" | "last_6_months" | "all";
+type PeriodFilter = "current_month" | "last_3_months" | "last_6_months" | "all" | "custom";
 
 interface CategoryExpense {
   category_id: string | null;
@@ -57,6 +57,7 @@ const PERIODS: { value: PeriodFilter; label: string }[] = [
   { value: "last_3_months", label: "Ultimele 3 luni" },
   { value: "last_6_months", label: "Ultimele 6 luni" },
   { value: "all", label: "Tot" },
+  { value: "custom", label: "Perioadă personalizată" },
 ];
 
 function formatAmount(amount: number, currency: string): string {
@@ -99,6 +100,8 @@ function HealthScoreRing({ score }: { score: number }) {
 
 export default function ReportsClient({ currency }: Props) {
   const [period, setPeriod] = useState<PeriodFilter>("current_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,17 +110,23 @@ export default function ReportsClient({ currency }: Props) {
   const [coachError, setCoachError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchReports();
-    setCoachResult(null);
-    setCoachError(null);
+    if (period !== "custom") {
+      fetchReports();
+      setCoachResult(null);
+      setCoachError(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  const fetchReports = async () => {
+  const fetchReports = async (dateFrom?: string, dateTo?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/reports?period=${period}`);
+      let url = `/api/reports?period=${period}`;
+      if (dateFrom && dateTo) {
+        url = `/api/reports?period=custom&date_from=${dateFrom}&date_to=${dateTo}`;
+      }
+      const res = await fetch(url);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Eroare necunoscută");
       setData(json.data);
@@ -126,6 +135,17 @@ export default function ReportsClient({ currency }: Props) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApplyCustom = () => {
+    if (!customFrom || !customTo) return;
+    setCoachResult(null);
+    setCoachError(null);
+    // Adăugăm o zi la dateTo ca să includem ziua selectată
+    const to = new Date(customTo);
+    to.setDate(to.getDate() + 1);
+    const toStr = to.toISOString().split("T")[0];
+    fetchReports(customFrom, toStr);
   };
 
   const analyzeWithAI = async () => {
@@ -174,7 +194,7 @@ export default function ReportsClient({ currency }: Props) {
       </div>
 
       {/* A. Filtre perioadă */}
-      <div className="flex gap-2 flex-wrap mb-6 animate-fade-in-up">
+      <div className="flex gap-2 flex-wrap mb-4 animate-fade-in-up">
         {PERIODS.map(({ value, label }) => (
           <button
             key={value}
@@ -189,6 +209,40 @@ export default function ReportsClient({ currency }: Props) {
           </button>
         ))}
       </div>
+
+      {/* Date picker pentru perioadă personalizată */}
+      {period === "custom" && (
+        <div className="glass-card rounded-2xl p-4 mb-6 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">De la</label>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="input-field w-full"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Până la</label>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                min={customFrom}
+                className="input-field w-full"
+              />
+            </div>
+            <button
+              onClick={handleApplyCustom}
+              disabled={!customFrom || !customTo || loading}
+              className="btn-primary px-6 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap disabled:opacity-40"
+            >
+              Aplică
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Loading state */}
       {loading && (
@@ -208,7 +262,7 @@ export default function ReportsClient({ currency }: Props) {
           <div className="text-4xl mb-3">⚠️</div>
           <p className="text-red-500 font-medium">{error}</p>
           <button
-            onClick={fetchReports}
+            onClick={() => fetchReports()}
             className="mt-4 btn-primary px-5 py-2 rounded-xl text-sm font-semibold"
           >
             Reîncearcă

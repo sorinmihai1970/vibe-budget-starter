@@ -267,6 +267,12 @@ export default function TransactionsClient({ initialTransactions, banks, categor
 
   return (
     <div className="space-y-4">
+      {/* Titlu pagină */}
+      <div className="animate-fade-in-up">
+        <h2 className="text-2xl font-bold text-gray-800">Tranzacții</h2>
+        <p className="text-sm text-gray-500 mt-1">Gestionează și filtrează toate tranzacțiile tale</p>
+      </div>
+
       {/* Bara de filtre */}
       <div className="glass-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

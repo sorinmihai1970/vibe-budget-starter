@@ -64,6 +64,35 @@ export async function parseCSV(file: File): Promise<ParseResult> {
   const rawText = await file.text();
   const firstLines = rawText.split(/\r?\n/).slice(0, 6).join(" ").toLowerCase();
 
+  // Detecție format BT (Banca Transilvania) — conține "BTRL" sau "Data procesarii"
+  const isBT = firstLines.includes("btrl") || firstLines.includes("data procesarii");
+
+  if (isBT) {
+    console.log('[parseCSV] Format BT detectat → parser specializat');
+    return new Promise((resolve) => {
+      Papa.parse(rawText, {
+        header: false,
+        skipEmptyLines: false,
+        complete: (results) => {
+          const rows = results.data as string[][];
+          const transactions = parseBTRows(rows);
+          if (transactions.length > 0) {
+            resolve({ success: true, transactions, rowCount: rows.length });
+          } else {
+            resolve({
+              success: false,
+              transactions: [],
+              error: "Nu s-au putut extrage tranzacții din fișierul BT",
+            });
+          }
+        },
+        error: (err: Error) => {
+          resolve({ success: false, transactions: [], error: err.message });
+        },
+      });
+    });
+  }
+
   // Detecție format ING (primele rânduri conțin "titular cont" sau "cnp:")
   const isING = firstLines.includes("titular cont") || firstLines.includes("cnp:");
 
@@ -326,6 +355,108 @@ function parseINGRows(rows: any[][]): ParsedTransaction[] {
   }
 
   console.log(`[parseING] ${transactions.length} tranzacții extrase`);
+  return transactions;
+}
+
+/**
+ * Parser specializat pentru BT (Banca Transilvania) CSV
+ *
+ * Formatul BT are:
+ * - Rânduri de metadate (cont, perioadă, utilizator, client)
+ * - Un rând header: "Data procesarii, Data tranzactiei, Descriere, Referinta, Debit, Credit, Suma"
+ * - Sume cu virgula ca separator de mii și punct ca separator zecimal: "1,200.00"
+ * - Descriere separată cu ";": "Tip;detalii;Beneficiar;IBAN;BIC;REF:..."
+ */
+function parseBTRows(rows: string[][]): ParsedTransaction[] {
+  // Parsare sume BT: "1,200.00 " → 1200, "100.00 " → 100
+  const parseBTAmount = (val: string): number => {
+    if (!val || !val.trim()) return 0;
+    // BT: virgula = separator mii, punct = separator zecimal
+    // "1,200.00 " → elimină spații și virgule → "1200.00" → 1200
+    const cleaned = val.replace(/\s/g, "").replace(/,/g, "");
+    return parseFloat(cleaned) || 0;
+  };
+
+  // Curățare descriere BT: separat cu ";" → filtrează IBAN, BIC, REF, coduri numerice lungi
+  const parseBTDescription = (raw: string): string => {
+    const parts = raw.split(";").map(p => p.trim()).filter(Boolean);
+    const meaningful = parts.filter(p =>
+      !p.match(/^RO[A-Z0-9]{14,}/i) &&  // IBAN românesc (RO + 14+ chars)
+      !p.startsWith("REF:") &&           // referință tranzacție
+      !/^[A-Z]{4}RO\d{2}$/.test(p) &&   // cod BIC (ex: BTRLRO22)
+      !/^\d{7,}$/.test(p)                // numere lungi (coduri interne)
+    );
+    return meaningful.join(" - ") || raw;
+  };
+
+  // Găsim rândul header (conține "Descriere" și "Debit" și "Credit")
+  let headerIdx = -1;
+  let dateCol = -1, descCol = -1, debitCol = -1, creditCol = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    let tmpDate = -1, tmpDesc = -1, tmpDebit = -1, tmpCredit = -1;
+
+    for (let j = 0; j < row.length; j++) {
+      const cell = String(row[j]).toLowerCase().trim();
+      // "Data tranzac?iei" — "?" e encoding issue pentru "ț", dar "data tranzac" e suficient
+      if (cell.includes("data tranzac")) tmpDate = j;
+      if (cell === "descriere") tmpDesc = j;
+      if (cell === "debit") tmpDebit = j;
+      if (cell === "credit") tmpCredit = j;
+    }
+
+    if (tmpDesc !== -1 && tmpDebit !== -1 && tmpCredit !== -1) {
+      headerIdx = i;
+      dateCol = tmpDate !== -1 ? tmpDate : 0;
+      descCol = tmpDesc;
+      debitCol = tmpDebit;
+      creditCol = tmpCredit;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    console.warn("[parseBT] Nu s-a găsit rândul header");
+    return [];
+  }
+
+  console.log(`[parseBT] Header la rândul ${headerIdx}: date=${dateCol}, desc=${descCol}, debit=${debitCol}, credit=${creditCol}`);
+
+  const transactions: ParsedTransaction[] = [];
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const dateStr = String(row[dateCol] || "").trim();
+    const descRaw = String(row[descCol] || "").trim();
+    const debitStr = String(row[debitCol] || "").trim();
+    const creditStr = String(row[creditCol] || "").trim();
+
+    // Sărim rândurile fără dată sau fără descriere
+    if (!dateStr || !descRaw) continue;
+
+    const debit = parseBTAmount(debitStr);
+    const credit = parseBTAmount(creditStr);
+
+    // Sărim rândurile cu ambele zero (ex: sold inițial sau rânduri goale)
+    if (debit === 0 && credit === 0) continue;
+
+    const amount = credit > 0 ? credit : -debit;
+    const date = formatDate(dateStr);
+    const description = parseBTDescription(descRaw);
+
+    transactions.push({
+      date,
+      description,
+      amount,
+      currency: "RON",
+      type: amount >= 0 ? "credit" : "debit",
+    });
+  }
+
+  console.log(`[parseBT] ${transactions.length} tranzacții extrase`);
   return transactions;
 }
 
@@ -701,6 +832,20 @@ function formatDate(dateStr: string | number): string {
       console.log('[formatDate] Revolut format detected. Result:', result);
       return result;
     }
+  }
+
+  // Format Revolut România: M/D/YYYY H:MM (american, cu timestamp)
+  // Ex: "3/11/2026 10:41" = 11 martie 2026 (luna/ziua/an)
+  // Detectăm prin: separator "/" + timestamp (spațiu + cifre după an)
+  const revolutROPattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+\d/;
+  const revolutROMatch = cleanStr.match(revolutROPattern);
+  if (revolutROMatch) {
+    const month = revolutROMatch[1].padStart(2, "0"); // luna e prima
+    const day = revolutROMatch[2].padStart(2, "0");   // ziua e a doua
+    const year = revolutROMatch[3];
+    const result = `${year}-${month}-${day}`;
+    console.log('[formatDate] Revolut RO M/D/YYYY format detected. Result:', result);
+    return result;
   }
 
   // Parsăm formate românești: DD.MM.YYYY sau DD/MM/YYYY (cu sau fără timestamp)

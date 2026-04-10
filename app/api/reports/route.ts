@@ -57,10 +57,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Parametru perioadă
+    // 2. Parametru perioadă sau interval custom
     const { searchParams } = new URL(request.url);
     const period = (searchParams.get("period") || "current_month") as PeriodFilter;
-    const { startDate, endDate } = getDateRange(period);
+    const dateFrom = searchParams.get("date_from"); // YYYY-MM-DD
+    const dateTo = searchParams.get("date_to");     // YYYY-MM-DD
+
+    // Interval custom are prioritate față de period
+    const { startDate, endDate } = (dateFrom && dateTo)
+      ? { startDate: dateFrom, endDate: dateTo }
+      : getDateRange(period);
 
     const admin = createAdminClient();
 
