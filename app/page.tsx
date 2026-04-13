@@ -12,11 +12,17 @@
  */
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  // Dacă utilizatorul e logat, îl trimitem direct la dashboard
+  if (user) {
+    redirect("/dashboard");
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-orange-50">
@@ -30,32 +36,20 @@ export default async function Home() {
           </p>
 
           <div className="flex items-center justify-center gap-4 mb-10">
-            {user ? (
-              <Link
-                href="/dashboard"
-                className="px-6 py-3 rounded-full font-semibold text-white"
-                style={{ background: "#14B8A6" }}
-              >
-                Du-mă la Dashboard →
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/register"
-                  className="px-6 py-3 rounded-full font-semibold text-white"
-                  style={{ background: "#14B8A6" }}
-                >
-                  Înregistrează-te
-                </Link>
-                <Link
-                  href="/login"
-                  className="px-6 py-3 rounded-full font-semibold text-white"
-                  style={{ background: "#F97316" }}
-                >
-                  Login
-                </Link>
-              </>
-            )}
+            <Link
+              href="/register"
+              className="px-6 py-3 rounded-full font-semibold text-white"
+              style={{ background: "#14B8A6" }}
+            >
+              Înregistrează-te
+            </Link>
+            <Link
+              href="/login"
+              className="px-6 py-3 rounded-full font-semibold text-white"
+              style={{ background: "#F97316" }}
+            >
+              Login
+            </Link>
           </div>
 
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg">

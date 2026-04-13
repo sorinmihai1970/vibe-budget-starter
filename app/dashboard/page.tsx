@@ -157,7 +157,7 @@ export default async function DashboardPage() {
               className="glass-card rounded-2xl p-4 text-center hover:no-underline hover:scale-105 transition-transform duration-200"
             >
               <span className="text-2xl block mb-1">📁</span>
-              <span className="text-sm font-medium text-gray-700">Import CSV</span>
+              <span className="text-sm font-medium text-gray-700">Import CSV sau Excel</span>
             </Link>
           </div>
 

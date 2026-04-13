@@ -78,6 +78,9 @@ export default function TransactionsClient({ initialTransactions, banks, categor
   // Selecție
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Picker categorie inline (id-ul tranzacției cu picker-ul deschis)
+  const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
+
   // Filtre
   const [search, setSearch] = useState("");
   const [filterBank, setFilterBank] = useState("");
@@ -240,6 +243,52 @@ export default function TransactionsClient({ initialTransactions, banks, categor
       toast.error("Eroare de rețea");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleClearCategory = async (t: Transaction) => {
+    try {
+      const res = await fetch(`/api/transactions/${t.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: t.date, description: t.description,
+          amount: t.amount, currency: t.currency,
+          bank_id: t.bank_id, category_id: null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error ?? "Eroare"); return; }
+      setTransactions((prev) =>
+        prev.map((tx) => tx.id === t.id ? { ...tx, category_id: null, categories: null } : tx)
+      );
+      toast.success("Categorie ștearsă");
+    } catch {
+      toast.error("Eroare de rețea");
+    }
+  };
+
+  const handleSetCategory = async (t: Transaction, categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId) ?? null;
+    try {
+      const res = await fetch(`/api/transactions/${t.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: t.date, description: t.description,
+          amount: t.amount, currency: t.currency,
+          bank_id: t.bank_id, category_id: categoryId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error ?? "Eroare"); return; }
+      setTransactions((prev) =>
+        prev.map((tx) => tx.id === t.id ? { ...tx, category_id: categoryId, categories: cat } : tx)
+      );
+      setCategoryPickerTxId(null);
+      toast.success("Categorie actualizată");
+    } catch {
+      toast.error("Eroare de rețea");
     }
   };
 
@@ -458,13 +507,52 @@ export default function TransactionsClient({ initialTransactions, banks, categor
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {t.categories ? (
-                          <span className="text-gray-700">
-                            {t.categories.icon} {t.categories.name}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
+                        <div className="relative flex items-center gap-1">
+                          {t.categories ? (
+                            <>
+                              <span className="text-gray-700 truncate max-w-28">
+                                {t.categories.icon} {t.categories.name}
+                              </span>
+                              <button
+                                onClick={() => setCategoryPickerTxId(categoryPickerTxId === t.id ? null : t.id)}
+                                className="text-gray-400 hover:text-teal-600 px-1 rounded transition-colors"
+                                title="Schimbă categoria"
+                              >✏</button>
+                              <button
+                                onClick={() => handleClearCategory(t)}
+                                className="text-gray-400 hover:text-red-500 px-1 rounded transition-colors"
+                                title="Șterge categoria"
+                              >✕</button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setCategoryPickerTxId(categoryPickerTxId === t.id ? null : t.id)}
+                              className="text-xs text-teal-600 hover:text-teal-800 px-2 py-1 rounded-lg border border-teal-200 hover:bg-teal-50 transition-all"
+                            >
+                              + Categorizează
+                            </button>
+                          )}
+                          {/* Dropdown picker */}
+                          {categoryPickerTxId === t.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setCategoryPickerTxId(null)}
+                              />
+                              <div className="absolute top-full left-0 z-20 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-52 overflow-y-auto">
+                                {categories.map((c) => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => handleSetCategory(t, c.id)}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-teal-50 text-gray-700 transition-colors"
+                                  >
+                                    {c.icon} {c.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button
@@ -531,9 +619,46 @@ export default function TransactionsClient({ initialTransactions, banks, categor
 
                   {/* Rând 3: categorie + butoane */}
                   <div className="flex items-center justify-between pl-6">
-                    <span className="text-xs text-gray-400">
-                      {t.categories ? `${t.categories.icon} ${t.categories.name}` : ""}
-                    </span>
+                    <div className="relative flex items-center gap-1">
+                      {t.categories ? (
+                        <>
+                          <span className="text-xs text-gray-500">
+                            {t.categories.icon} {t.categories.name}
+                          </span>
+                          <button
+                            onClick={() => setCategoryPickerTxId(categoryPickerTxId === t.id ? null : t.id)}
+                            className="text-gray-400 hover:text-teal-600 text-xs px-0.5 transition-colors"
+                          >✏</button>
+                          <button
+                            onClick={() => handleClearCategory(t)}
+                            className="text-gray-400 hover:text-red-500 text-xs px-0.5 transition-colors"
+                          >✕</button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setCategoryPickerTxId(categoryPickerTxId === t.id ? null : t.id)}
+                          className="text-xs text-teal-600 border border-teal-200 px-2 py-0.5 rounded-lg hover:bg-teal-50 transition-all"
+                        >
+                          + Categorizează
+                        </button>
+                      )}
+                      {categoryPickerTxId === t.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setCategoryPickerTxId(null)} />
+                          <div className="absolute top-full left-0 z-20 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-52 overflow-y-auto">
+                            {categories.map((c) => (
+                              <button
+                                key={c.id}
+                                onClick={() => handleSetCategory(t, c.id)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-teal-50 text-gray-700 transition-colors"
+                              >
+                                {c.icon} {c.name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <div className="flex gap-1">
                       <button
                         onClick={() => openEditModal(t)}

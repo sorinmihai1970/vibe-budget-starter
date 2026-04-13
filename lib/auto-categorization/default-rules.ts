@@ -15,12 +15,25 @@ export interface DefaultRule {
 }
 
 export const DEFAULT_RULES: DefaultRule[] = [
+  // Plăți generice la POS (BT, ING, Revolut — orice plată la terminal fizic)
+  // Pus PRIMUL pentru a prinde toate plățile POS necunoscute ca "Cumpărături"
+  {
+    keywords: [
+      "plata la pos", "cumparare pos", "cumparare online",
+      "plata pos", "pos non-bt", "pos bt",
+    ],
+    categoryNames: [
+      "cuparaturi", "cumpărături", "cumparaturi", "shopping",
+    ],
+    type: "expense",
+  },
   // Supermarketuri & Alimente
   {
     keywords: [
       "mega image", "kaufland", "lidl", "penny", "carrefour", "auchan",
       "profi", "selgros", "metro", "cora", "hypermarket", "supermarket",
       "minimarket", "alimentar",
+      "brico depot", "bricodepot", "leroy merlin", "dedeman", "hornbach",
     ],
     categoryNames: [
       "cuparaturi", "cumpărături", "cumparaturi", "alimente", "mâncare",
@@ -99,7 +112,7 @@ export const DEFAULT_RULES: DefaultRule[] = [
       "netflix", "spotify", "hbo", "disney", "apple", "google play",
       "youtube premium", "amazon",
       "openai", "claude.ai", "anthropic", "chatgpt",
-      "adobe", "microsoft", "dropbox", "canva",
+      "google", "adobe", "microsoft", "dropbox", "canva",
     ],
     categoryNames: [
       "abonamente", "telecom", "subscriptii", "subscripții", "media",
