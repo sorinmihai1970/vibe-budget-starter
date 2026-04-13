@@ -52,19 +52,7 @@ export default async function Home() {
             </Link>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg">
-            <div className="p-4 bg-teal-50 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>📚 Starter Kit Include:</strong> Next.js setup complet, Drizzle ORM schema,
-                Supabase config, Tailwind styling, și structura folderelor pregătită.
-              </p>
-            </div>
-          </div>
 
-          <p className="mt-8 text-gray-500">
-            Începe cu <span className="font-mono bg-gray-100 px-2 py-1 rounded">npm install</span> apoi
-            <span className="font-mono bg-gray-100 px-2 py-1 rounded ml-2">npm run dev</span>
-          </p>
         </div>
       </div>
     </div>
