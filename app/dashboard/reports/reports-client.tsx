@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   PieChart,
   Pie,
@@ -39,6 +39,32 @@ interface ReportsData {
   totalExpenses: number;
   totalIncome: number;
   currency: string;
+}
+
+// Tranzacție pentru pivot (fetch din /api/transactions)
+interface TxForPivot {
+  id: string;
+  date: string;
+  amount: number;
+  category_id: string | null;
+  categories: { name: string; icon: string } | null;
+}
+
+interface PivotCell {
+  amount: number;
+  count: number;
+  change?: number; // % față de luna anterioară
+}
+
+interface PivotRow {
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  months: Record<string, PivotCell>;
+  total: number;
+  average: number;
+  maxIncrease: { month: string; change: number };
+  maxDecrease: { month: string; change: number };
 }
 
 interface CoachResult {
@@ -99,6 +125,7 @@ function HealthScoreRing({ score }: { score: number }) {
 }
 
 export default function ReportsClient({ currency }: Props) {
+  const [activeView, setActiveView] = useState<"charts" | "pivot">("charts");
   const [period, setPeriod] = useState<PeriodFilter>("current_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -109,6 +136,12 @@ export default function ReportsClient({ currency }: Props) {
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachError, setCoachError] = useState<string | null>(null);
 
+  // Pivot state
+  const [allTransactions, setAllTransactions] = useState<TxForPivot[] | null>(null);
+  const [pivotLoading, setPivotLoading] = useState(false);
+  const [pivotError, setPivotError] = useState<string | null>(null);
+  const [showPercentages, setShowPercentages] = useState(false);
+
   useEffect(() => {
     if (period !== "custom") {
       fetchReports();
@@ -117,6 +150,29 @@ export default function ReportsClient({ currency }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
+
+  // Fetch tranzacții pentru pivot (o singură dată)
+  useEffect(() => {
+    if (activeView === "pivot" && !allTransactions) {
+      fetchAllTransactions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
+
+  const fetchAllTransactions = async () => {
+    setPivotLoading(true);
+    setPivotError(null);
+    try {
+      const res = await fetch("/api/transactions");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Eroare necunoscută");
+      setAllTransactions(json.data as TxForPivot[]);
+    } catch {
+      setPivotError("Eroare la încărcarea tranzacțiilor");
+    } finally {
+      setPivotLoading(false);
+    }
+  };
 
   const fetchReports = async (dateFrom?: string, dateTo?: string) => {
     setLoading(true);
@@ -183,6 +239,104 @@ export default function ReportsClient({ currency }: Props) {
     boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
   };
 
+  // Filtrăm tranzacțiile pivot după aceeași perioadă ca și graficele
+  const pivotFiltered = useMemo((): TxForPivot[] => {
+    if (!allTransactions) return [];
+    if (period === "all") return allTransactions;
+    if (period === "custom" && customFrom && customTo) {
+      return allTransactions.filter((t) => t.date >= customFrom && t.date <= customTo);
+    }
+    const now = new Date();
+    const monthsBack = period === "current_month" ? 0 : period === "last_3_months" ? 3 : 6;
+    const start = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+    const startStr = start.toISOString().split("T")[0];
+    return allTransactions.filter((t) => t.date >= startStr);
+  }, [allTransactions, period, customFrom, customTo]);
+
+  // Lunile disponibile în pivot
+  const pivotMonths = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of pivotFiltered) {
+      if (Number(t.amount) < 0) s.add(t.date.substring(0, 7));
+    }
+    return Array.from(s).sort();
+  }, [pivotFiltered]);
+
+  // Rândurile pivot: categorii × luni
+  const pivotRows = useMemo((): PivotRow[] => {
+    const expenses = pivotFiltered.filter((t) => Number(t.amount) < 0);
+    const catMap = new Map<string, { name: string; icon: string; months: Map<string, { amount: number; count: number }> }>();
+
+    for (const t of expenses) {
+      const catId = t.category_id ?? "__uncategorized";
+      const catName = t.categories?.name ?? "Necategorizat";
+      const catIcon = t.categories?.icon ?? "❓";
+      const monthKey = t.date.substring(0, 7);
+      const absAmt = Math.abs(Number(t.amount));
+
+      if (!catMap.has(catId)) catMap.set(catId, { name: catName, icon: catIcon, months: new Map() });
+      const cat = catMap.get(catId)!;
+      const existing = cat.months.get(monthKey) ?? { amount: 0, count: 0 };
+      existing.amount += absAmt;
+      existing.count++;
+      cat.months.set(monthKey, existing);
+    }
+
+    const rows: PivotRow[] = [];
+    catMap.forEach((catData, catId) => {
+      const months: Record<string, PivotCell> = {};
+      let total = 0;
+      for (const m of pivotMonths) {
+        const cell = catData.months.get(m) ?? { amount: 0, count: 0 };
+        months[m] = { amount: cell.amount, count: cell.count };
+        total += cell.amount;
+      }
+      const average = pivotMonths.length > 0 ? total / pivotMonths.length : 0;
+
+      // Calculăm % schimbare față de luna anterioară
+      let prevAmt: number | null = null;
+      let maxIncrease = { month: "", change: 0 };
+      let maxDecrease = { month: "", change: 0 };
+      for (const m of pivotMonths) {
+        const cur = months[m].amount;
+        if (prevAmt !== null && prevAmt > 0) {
+          const change = ((cur - prevAmt) / prevAmt) * 100;
+          months[m].change = change;
+          if (change > maxIncrease.change) maxIncrease = { month: m, change };
+          if (change < maxDecrease.change) maxDecrease = { month: m, change };
+        }
+        prevAmt = cur;
+      }
+
+      rows.push({ categoryId: catId, categoryName: catData.name, categoryIcon: catData.icon, months, total, average, maxIncrease, maxDecrease });
+    });
+
+    return rows.sort((a, b) => b.total - a.total);
+  }, [pivotFiltered, pivotMonths]);
+
+  const formatPivotMonth = (key: string): string => {
+    const [, m] = key.split("-");
+    const names = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep", "Oct", "Noi", "Dec"];
+    return `${names[parseInt(m) - 1]} ${key.split("-")[0]}`;
+  };
+
+  const getCellColor = (amount: number, average: number): string => {
+    if (amount === 0) return "bg-gray-50 text-gray-400";
+    const ratio = amount / average;
+    if (ratio >= 1.5) return "bg-red-100 text-red-900 font-bold";
+    if (ratio >= 1.2) return "bg-orange-100 text-orange-900 font-semibold";
+    if (ratio >= 0.8) return "bg-yellow-50 text-yellow-900";
+    return "bg-green-100 text-green-900";
+  };
+
+  const getChangeColor = (change: number): string => {
+    if (change >= 50) return "text-red-700 font-bold";
+    if (change >= 20) return "text-orange-700 font-semibold";
+    if (change >= 0) return "text-yellow-700";
+    if (change >= -20) return "text-green-700";
+    return "text-green-900 font-bold";
+  };
+
   return (
     <>
       {/* Titlu secțiune */}
@@ -193,7 +347,196 @@ export default function ReportsClient({ currency }: Props) {
         </p>
       </div>
 
-      {/* A. Filtre perioadă */}
+      {/* View toggle: Grafice | Tabel Pivot */}
+      <div className="flex gap-2 mb-6 animate-fade-in-up">
+        <button
+          onClick={() => setActiveView("charts")}
+          className={activeView === "charts"
+            ? "btn-primary px-5 py-2 rounded-xl text-sm font-semibold"
+            : "px-5 py-2 rounded-xl border border-gray-200 bg-white/70 hover:bg-white text-gray-600 text-sm font-medium transition-all"}
+        >
+          📊 Grafice
+        </button>
+        <button
+          onClick={() => setActiveView("pivot")}
+          className={activeView === "pivot"
+            ? "btn-primary px-5 py-2 rounded-xl text-sm font-semibold"
+            : "px-5 py-2 rounded-xl border border-gray-200 bg-white/70 hover:bg-white text-gray-600 text-sm font-medium transition-all"}
+        >
+          📋 Tabel Pivot
+        </button>
+      </div>
+
+      {/* === TABEL PIVOT: Categorii × Luni === */}
+      {activeView === "pivot" && (
+        <div className="animate-fade-in-up space-y-6">
+          {pivotLoading && <div className="glass-card rounded-2xl h-64 animate-pulse" />}
+          {pivotError && (
+            <div className="glass-card rounded-2xl p-8 text-center">
+              <p className="text-red-500">{pivotError}</p>
+              <button onClick={fetchAllTransactions} className="mt-3 btn-primary px-5 py-2 rounded-xl text-sm">Reîncearcă</button>
+            </div>
+          )}
+          {allTransactions && !pivotLoading && (
+            <>
+              {/* Tabel pivot principal */}
+              <div className="glass-card rounded-2xl p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">Raport Pivot — Categorii × Luni</h3>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showPercentages}
+                      onChange={(e) => setShowPercentages(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 accent-teal-500"
+                    />
+                    <span className="text-sm text-gray-600">Arată % față de luna anterioară</span>
+                  </label>
+                </div>
+
+                {/* Legendă culori */}
+                <div className="flex flex-wrap gap-3 mb-4 text-xs">
+                  {[
+                    { cls: "bg-red-100 border-red-300", label: "Critic (>150% din medie)" },
+                    { cls: "bg-orange-100 border-orange-300", label: "Ridicat (120–150%)" },
+                    { cls: "bg-yellow-50 border-yellow-300", label: "Normal (80–120%)" },
+                    { cls: "bg-green-100 border-green-300", label: "Sub medie (<80%)" },
+                    { cls: "bg-gray-50 border-gray-300", label: "Fără cheltuieli" },
+                  ].map(({ cls, label }) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <div className={`w-6 h-3 ${cls} border rounded`} />
+                      <span className="text-gray-600">{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {pivotRows.length === 0 || pivotMonths.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <p className="text-4xl mb-3">📊</p>
+                    <p className="text-sm">Nicio cheltuială categorizată în această perioadă</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 border-b-2 border-gray-300">
+                          <th className="sticky left-0 bg-gray-100 px-4 py-3 text-left font-bold border-r-2 border-gray-300 z-10 min-w-[160px]">
+                            Categorie
+                          </th>
+                          {pivotMonths.map((m) => (
+                            <th key={m} className="px-3 py-3 text-center font-semibold border-r border-gray-200 min-w-[100px]">
+                              {formatPivotMonth(m)}
+                            </th>
+                          ))}
+                          <th className="px-4 py-3 text-center font-bold border-l-2 border-gray-300 bg-indigo-50 min-w-[100px]">Total</th>
+                          <th className="px-4 py-3 text-center font-bold bg-indigo-50 min-w-[100px]">Medie/lună</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pivotRows.map((row) => (
+                          <tr key={row.categoryId} className="border-b hover:bg-gray-50/50">
+                            <td className="sticky left-0 bg-white px-4 py-3 font-semibold border-r-2 border-gray-300 z-10">
+                              <div className="flex items-center gap-2">
+                                <span>{row.categoryIcon}</span>
+                                <span className="truncate">{row.categoryName}</span>
+                              </div>
+                            </td>
+                            {pivotMonths.map((m) => {
+                              const cell = row.months[m];
+                              return (
+                                <td key={m} className={`px-3 py-3 text-center border-r border-gray-200 ${getCellColor(cell.amount, row.average)}`}>
+                                  <div className="font-semibold">
+                                    {cell.amount > 0
+                                      ? cell.amount.toLocaleString("ro-RO", { maximumFractionDigits: 0 })
+                                      : "—"}
+                                  </div>
+                                  {showPercentages && cell.change !== undefined && (
+                                    <div className={`text-xs mt-0.5 ${getChangeColor(cell.change)}`}>
+                                      {cell.change > 0 ? "+" : ""}{cell.change.toFixed(0)}%
+                                    </div>
+                                  )}
+                                  {cell.count > 0 && (
+                                    <div className="text-xs text-gray-400 mt-0.5">{cell.count} tx</div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="px-4 py-3 text-center font-bold border-l-2 border-gray-300 bg-indigo-50">
+                              {row.total.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} {currency}
+                            </td>
+                            <td className="px-4 py-3 text-center font-semibold bg-indigo-50">
+                              {row.average.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} {currency}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Top Creșteri & Scăderi */}
+              {pivotRows.length > 0 && (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Top Creșteri */}
+                  <div className="glass-card rounded-2xl p-6">
+                    <h3 className="text-base font-bold text-gray-800 mb-3">📈 Top Creșteri Lunare</h3>
+                    <div className="space-y-2">
+                      {pivotRows
+                        .filter((r) => r.maxIncrease.change > 0)
+                        .sort((a, b) => b.maxIncrease.change - a.maxIncrease.change)
+                        .slice(0, 5)
+                        .map((row) => (
+                          <div key={row.categoryId} className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{row.categoryIcon}</span>
+                              <div>
+                                <div className="font-semibold text-gray-900 text-sm">{row.categoryName}</div>
+                                <div className="text-xs text-gray-500">{formatPivotMonth(row.maxIncrease.month)}</div>
+                              </div>
+                            </div>
+                            <div className="text-lg font-bold text-red-700">+{row.maxIncrease.change.toFixed(0)}%</div>
+                          </div>
+                        ))}
+                      {pivotRows.filter((r) => r.maxIncrease.change > 0).length === 0 && (
+                        <p className="text-gray-400 text-sm text-center py-2">Nicio creștere semnificativă</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Top Scăderi */}
+                  <div className="glass-card rounded-2xl p-6">
+                    <h3 className="text-base font-bold text-gray-800 mb-3">📉 Top Scăderi Lunare</h3>
+                    <div className="space-y-2">
+                      {pivotRows
+                        .filter((r) => r.maxDecrease.change < 0)
+                        .sort((a, b) => a.maxDecrease.change - b.maxDecrease.change)
+                        .slice(0, 5)
+                        .map((row) => (
+                          <div key={row.categoryId} className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{row.categoryIcon}</span>
+                              <div>
+                                <div className="font-semibold text-gray-900 text-sm">{row.categoryName}</div>
+                                <div className="text-xs text-gray-500">{formatPivotMonth(row.maxDecrease.month)}</div>
+                              </div>
+                            </div>
+                            <div className="text-lg font-bold text-green-700">{row.maxDecrease.change.toFixed(0)}%</div>
+                          </div>
+                        ))}
+                      {pivotRows.filter((r) => r.maxDecrease.change < 0).length === 0 && (
+                        <p className="text-gray-400 text-sm text-center py-2">Nicio scădere semnificativă</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* A. Filtre perioadă — vizibile pe ambele tab-uri */}
       <div className="flex gap-2 flex-wrap mb-4 animate-fade-in-up">
         {PERIODS.map(({ value, label }) => (
           <button
@@ -243,6 +586,9 @@ export default function ReportsClient({ currency }: Props) {
           </div>
         </div>
       )}
+
+      {/* === GRAFICE === */}
+      {activeView === "charts" && <>
 
       {/* Loading state */}
       {loading && (
@@ -491,6 +837,7 @@ export default function ReportsClient({ currency }: Props) {
           )}
         </>
       )}
+      </> /* end activeView === "charts" */}
     </>
   );
 }
